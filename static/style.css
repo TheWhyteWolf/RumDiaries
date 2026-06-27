@@ -1,0 +1,237 @@
+/* The Rum Diaries — parchment letters for a pirate Pathfinder campaign. */
+
+:root {
+  --ink: #3a2616;          /* dark sepia "ink" */
+  --ink-soft: #5c4123;
+  --parchment: #e9d8ad;
+  --parchment-edge: #c9ae72;
+  --rum: #7a4a1e;          /* stain colour */
+  --sea-1: #0d2a33;
+  --sea-2: #14333a;
+  --gold: #c9a227;
+}
+
+* { box-sizing: border-box; }
+
+html { scroll-behavior: smooth; }
+
+body {
+  margin: 0;
+  color: var(--ink);
+  font-family: "IM Fell English", Georgia, serif;
+  font-size: 1.15rem;
+  line-height: 1.7;
+  /* A dark, weathered sea the letters rest upon. */
+  background-color: var(--sea-1);
+  background-image:
+    radial-gradient(120% 80% at 50% -10%, rgba(40, 86, 96, 0.55), transparent 60%),
+    repeating-linear-gradient(120deg, rgba(255, 255, 255, 0.015) 0 2px, transparent 2px 8px),
+    linear-gradient(160deg, var(--sea-1), var(--sea-2));
+  background-attachment: fixed;
+}
+
+.voyage {
+  max-width: 56rem;
+  margin: 0 auto;
+  padding: clamp(1.5rem, 4vw, 4rem) clamp(1rem, 4vw, 3rem) 5rem;
+}
+
+/* ----------------------------------------------------------------- header */
+.ledger-head { text-align: center; color: #f0e2bd; margin-bottom: 2.5rem; }
+
+.ledger-head h1 {
+  font-family: "Pirata One", "IM Fell English SC", serif;
+  font-size: clamp(2.8rem, 9vw, 5.5rem);
+  margin: 0;
+  letter-spacing: 1px;
+  color: #f3e6c0;
+  text-shadow: 0 2px 0 #2a1d10, 0 0 24px rgba(201, 162, 39, 0.35);
+}
+
+.subtitle {
+  font-style: italic;
+  margin: 0.25rem 0 1.75rem;
+  color: #cdbd95;
+  font-size: 1.2rem;
+}
+
+/* Ports of call — a little brass-and-rope index. */
+.voyage-log {
+  display: inline-block;
+  text-align: left;
+  border: 1px solid rgba(201, 162, 39, 0.4);
+  border-radius: 6px;
+  padding: 0.75rem 1.5rem 0.9rem;
+  background: rgba(0, 0, 0, 0.18);
+}
+.voyage-log-title {
+  display: block;
+  font-family: "IM Fell English SC", serif;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  font-size: 0.8rem;
+  color: var(--gold);
+  margin-bottom: 0.35rem;
+}
+.voyage-log ol { margin: 0; padding-left: 1.2rem; }
+.voyage-log a { color: #ead9ad; text-decoration: none; }
+.voyage-log a:hover { color: #fff; text-decoration: underline wavy var(--gold); }
+
+/* ----------------------------------------------------------------- letter */
+.letter {
+  position: relative;
+  margin: 0 auto 3.5rem;
+  padding: clamp(1.75rem, 5vw, 3.5rem) clamp(1.5rem, 5vw, 3.5rem);
+  max-width: 44rem;
+  color: var(--ink);
+  transform: rotate(var(--tilt, 0deg));
+  border-radius: 3px;
+  /* Aged parchment: warm base, scorched edges, soft uneven lighting. */
+  background-color: var(--parchment);
+  background-image:
+    radial-gradient(80% 60% at 20% 0%, rgba(255, 250, 230, 0.6), transparent 60%),
+    radial-gradient(120% 120% at 100% 100%, rgba(120, 80, 30, 0.30), transparent 55%),
+    radial-gradient(120% 120% at 0% 100%, rgba(120, 80, 30, 0.22), transparent 55%),
+    radial-gradient(140% 100% at 50% 50%, transparent 60%, rgba(90, 60, 20, 0.28)),
+    /* paper fibre noise */
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.05'/%3E%3C/svg%3E");
+  box-shadow:
+    0 1.5rem 2.5rem rgba(0, 0, 0, 0.55),
+    0 0.4rem 0.8rem rgba(0, 0, 0, 0.4),
+    inset 0 0 4rem rgba(120, 80, 30, 0.25);
+  transition: transform 0.4s ease, box-shadow 0.4s ease;
+}
+.letter:hover {
+  transform: rotate(0deg) translateY(-3px);
+  box-shadow:
+    0 2rem 3rem rgba(0, 0, 0, 0.6),
+    0 0.5rem 1rem rgba(0, 0, 0, 0.45),
+    inset 0 0 4rem rgba(120, 80, 30, 0.25);
+  z-index: 2;
+}
+
+.letter p { margin: 0 0 1.1rem; text-align: justify; hyphens: auto; }
+.letter p.faded { color: rgba(58, 38, 22, 0.5); font-style: italic; text-align: center; }
+.letter a { color: var(--rum); }
+
+.session-title {
+  font-family: "IM Fell English SC", serif;
+  font-size: clamp(1.7rem, 5vw, 2.4rem);
+  font-weight: 400;
+  letter-spacing: 0.5px;
+  margin: 0 0 1.25rem;
+  padding-bottom: 0.5rem;
+  color: #2e1d0f;
+  border-bottom: 2px solid transparent;
+  border-image: linear-gradient(90deg, transparent, var(--ink-soft) 20%, var(--ink-soft) 80%, transparent) 1;
+}
+.session-title::before { content: "\2693  "; /* anchor */ color: var(--rum); }
+
+/* Bullet lists of names / loot — quill ticks. */
+.letter ul { list-style: none; padding-left: 1.4rem; margin: 0 0 1.2rem; }
+.letter li { position: relative; margin: 0.2rem 0; }
+.letter li::before {
+  content: "\2738"; /* heavy snowflake-ish quill mark */
+  position: absolute; left: -1.4rem;
+  color: var(--rum); font-size: 0.85em;
+}
+
+/* The roster: who sailed, who sat it out. */
+.manifest {
+  margin: 0 0 1.6rem;
+  padding: 0.8rem 1.1rem;
+  background: rgba(120, 80, 30, 0.10);
+  border: 1px solid rgba(90, 60, 20, 0.35);
+  border-left: 4px solid var(--rum);
+  border-radius: 2px;
+  font-size: 0.98rem;
+}
+.manifest-row { display: flex; gap: 0.6rem; }
+.manifest-label {
+  font-family: "IM Fell English SC", serif;
+  letter-spacing: 0.5px;
+  color: var(--ink-soft);
+  min-width: 9.5rem;
+}
+.manifest-label::after { content: ""; }
+.manifest-val { flex: 1; }
+
+/* ----------------------------------------------------- ink splats & stains */
+/* Built from layered radial-gradients so there are no binary assets. */
+.splat {
+  position: absolute;
+  width: 130px; height: 130px;
+  pointer-events: none;
+  opacity: 0.5;
+  mix-blend-mode: multiply;
+  background-repeat: no-repeat;
+}
+.splat-1 {
+  top: -18px; right: 40px;
+  transform: rotate(12deg);
+  background:
+    radial-gradient(circle at 60px 60px, var(--ink) 0 22px, transparent 24px),
+    radial-gradient(circle at 96px 40px, var(--ink) 0 7px, transparent 9px),
+    radial-gradient(circle at 30px 92px, var(--ink) 0 5px, transparent 7px),
+    radial-gradient(circle at 104px 96px, var(--ink) 0 3px, transparent 4px),
+    radial-gradient(circle at 18px 30px, var(--ink) 0 2.5px, transparent 4px),
+    radial-gradient(circle at 80px 104px, var(--ink) 0 4px, transparent 6px);
+}
+.splat-2 {
+  bottom: 26px; left: -24px;
+  transform: rotate(-22deg) scale(0.85);
+  opacity: 0.4;
+  background:
+    radial-gradient(circle at 60px 60px, var(--ink) 0 16px, transparent 18px),
+    radial-gradient(circle at 24px 44px, var(--ink) 0 6px, transparent 8px),
+    radial-gradient(circle at 92px 70px, var(--ink) 0 4px, transparent 6px),
+    radial-gradient(circle at 70px 24px, var(--ink) 0 3px, transparent 5px),
+    radial-gradient(circle at 40px 96px, var(--ink) 0 2.5px, transparent 4px);
+}
+/* Vary placement per letter so no two look identical. */
+.letter[data-variant="1"] .splat-1 { top: auto; bottom: -16px; right: 70px; transform: rotate(-30deg); }
+.letter[data-variant="1"] .splat-2 { top: 40px; left: auto; right: -22px; }
+.letter[data-variant="2"] .splat-1 { top: 90px; right: -26px; transform: rotate(40deg) scale(0.8); }
+.letter[data-variant="2"] .splat-2 { bottom: 60px; left: 30px; transform: rotate(8deg) scale(0.7); }
+
+/* A ring left by a careless mug of rum. */
+.stain-ring {
+  position: absolute;
+  width: 150px; height: 132px;
+  right: 12%; bottom: 8%;
+  pointer-events: none;
+  mix-blend-mode: multiply;
+  opacity: 0.55;
+  border-radius: 50%;
+  background:
+    radial-gradient(ellipse at center,
+      transparent 0 58%,
+      rgba(122, 74, 30, 0.05) 58% 62%,
+      rgba(122, 74, 30, 0.28) 63% 70%,
+      rgba(122, 74, 30, 0.10) 71% 76%,
+      transparent 78%);
+  transform: rotate(-8deg);
+}
+.letter[data-variant="1"] .stain-ring { right: auto; left: 10%; top: 14%; bottom: auto; transform: rotate(14deg) scale(0.8); }
+.letter[data-variant="2"] .stain-ring { right: 18%; top: 20%; bottom: auto; transform: rotate(-18deg) scale(0.7); }
+
+/* ----------------------------------------------------------------- footer */
+.colophon {
+  text-align: center;
+  color: #b7a781;
+  font-style: italic;
+  font-size: 0.95rem;
+  margin-top: 2rem;
+}
+
+@media (max-width: 480px) {
+  body { font-size: 1.05rem; }
+  .letter { transform: none; }
+  .manifest-row { flex-direction: column; gap: 0; }
+  .manifest-label { min-width: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  .letter, .letter:hover { transition: none; }
+}
