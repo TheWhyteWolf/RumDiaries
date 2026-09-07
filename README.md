@@ -21,7 +21,23 @@ Google Doc ──(plain-text export)──▶ build.py ──▶ site/index.html
 - **`static/style.css`** — all the parchment / ink / stain styling (no binary
   assets; textures are generated with CSS gradients + an inline SVG filter).
 - **`.github/workflows/deploy.yml`** — builds and deploys, on push, hourly, or
-  on demand (`workflow_dispatch`).
+  on demand (`workflow_dispatch`). Hourly runs fingerprint the built site and
+  skip the deploy when the log hasn't changed, so an untouched doc costs one
+  cheap build instead of a full republish.
+
+## What the doc should look like
+
+The parser is deliberately forgiving, but it keys off a few conventions:
+
+- **`Session N: Title`** starts a new session. The colon (or a dash) matters —
+  it is what separates a heading from a sentence that merely happens to open
+  with "Session 2 will be next Thursday". A bare `Session 7` works too.
+- **The first line of the doc** becomes the page title; anything else above the
+  first session heading is rendered as an introduction under it.
+- **The first block of a session** becomes the roster box when at least two of
+  its lines look like `Present: …` / `Out: …`. Prose is left alone.
+- **Bullets** (`-`, `*`, `•`, and the glyphs Google Docs uses for nested
+  levels) become lists; `1.` / `1)` lines become numbered lists.
 
 ## Build locally
 
@@ -43,6 +59,7 @@ xdg-open site/index.html
 ## Changing things
 
 - **Different doc:** edit `DOC_ID` at the top of `build.py`.
-- **Rebuild frequency:** edit the `cron` line in `deploy.yml` (default hourly).
+- **Rebuild frequency:** edit the `cron` line in `deploy.yml` (default hourly;
+  it only redeploys when the rendered site actually changed).
 - **Look & feel:** it's all in `static/style.css` — parchment colours live in the
   `:root` block; ink splats and stains are the `.splat` / `.stain-ring` rules.

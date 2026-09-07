@@ -15,6 +15,7 @@ import html
 import re
 import shutil
 import sys
+import time
 import urllib.request
 from pathlib import Path
 
@@ -27,50 +28,106 @@ ROOT = Path(__file__).resolve().parent
 STATIC = ROOT / "static"
 OUT = ROOT / "site"
 
-SESSION_RE = re.compile(r"^Session\s+(\d+)\s*:?\s*(.*)$", re.IGNORECASE)
-LABEL_RE = re.compile(r"^[A-Za-z][^:]{0,28}:")
-BULLET_RE = re.compile(r"^\s*[-*•]\s+(.*)$")
+# A session heading is "Session N", optionally followed by a separator and a
+# title. Demanding the separator keeps ordinary prose that merely opens with
+# "Session 2 will be next Thursday…" from being mistaken for a new heading.
+SESSION_RE = re.compile(r"^Session\s+(\d+)\s*(?:[:.–—-]\s*(.*))?$", re.IGNORECASE)
+
+# A roster label: up to three words (parentheticals allowed) before the colon.
+# Anchored loosely so indented exports still match, and word-limited so a
+# narrative line like "We set out at dawn: the sea was calm" is left alone.
+_LABEL_WORD = r"[A-Za-z(][A-Za-z'’&/()-]*"
+LABEL_RE = re.compile(rf"^\s*[A-Za-z][A-Za-z'’&/()-]*(?:[ ]{_LABEL_WORD}){{0,2}}\s*:")
+
+# Google Docs' text export uses a different glyph per nesting level, and
+# autocorrects a typed "- " into an en dash.
+BULLET_RE = re.compile(r"^\s*[-*+•·‣◦○●▪▫–—]\s+(.*)$")
+NUMBER_RE = re.compile(r"^\s*\d{1,3}[.)]\s+(.*)$")
+
+FADED_NOTE = '<p class="faded">The ink trails off here — this tale is yet to be written&hellip;</p>'
+
+
+class FetchError(RuntimeError):
+    """The doc could not be fetched, or what came back was not the doc."""
 
 
 # --------------------------------------------------------------------------- #
 # Fetch + parse
 # --------------------------------------------------------------------------- #
-def fetch_text() -> str:
-    """Download the doc as UTF-8 text with normalised line endings."""
+def fetch_text(attempts: int = 3) -> str:
+    """Download the doc as UTF-8 text with normalised line endings.
+
+    Transport hiccups are retried — a scheduled build should not fail (and
+    e-mail the world) because Google blinked. A response that is *not* plain
+    text means the export endpoint handed us a sign-in or error page instead,
+    which no amount of retrying will fix.
+    """
     req = urllib.request.Request(EXPORT_URL, headers={"User-Agent": "RumDiaries/1.0"})
-    with urllib.request.urlopen(req, timeout=30) as resp:
-        raw = resp.read()
-    text = raw.decode("utf-8-sig")
-    return text.replace("\r\n", "\n").replace("\r", "\n")
+    for attempt in range(1, attempts + 1):
+        try:
+            with urllib.request.urlopen(req, timeout=30) as resp:
+                final_url = resp.geturl()
+                content_type = resp.headers.get_content_type()
+                raw = resp.read()
+        except Exception as exc:  # noqa: BLE001 — any transport failure is retryable
+            if attempt == attempts:
+                raise FetchError(f"could not reach the Google Doc: {exc}") from exc
+            time.sleep(2 * attempt)
+            continue
+
+        if content_type != "text/plain":
+            # Google answers an unshared doc with HTTP 200 and a sign-in page,
+            # so without this check the failure would surface much later as a
+            # baffling "no Session headings found".
+            raise FetchError(
+                f"the export endpoint returned {content_type} instead of plain text "
+                f"(landed on {final_url}) — the doc is most likely not shared publicly"
+            )
+
+        text = raw.decode("utf-8-sig")
+        return text.replace("\r\n", "\n").replace("\r", "\n")
+
+    raise FetchError("could not reach the Google Doc")  # pragma: no cover — loop always returns
 
 
 def split_sessions(text: str):
-    """Return (doc_title, [session dicts]).
+    """Return (doc_title, preamble_lines, [session dicts]).
 
-    Everything before the first ``Session N`` line is treated as preamble; the
-    first non-empty preamble line becomes the document title.
+    Everything before the first ``Session N`` line is preamble; its first
+    non-empty line becomes the document title and the rest is kept for the
+    header. Each session gets a unique HTML id, so a doc that repeats a
+    session number (a continuation, or a typo) still yields working anchors.
     """
     title = None
+    preamble: list[str] = []
     sessions: list[dict] = []
     current: dict | None = None
 
     for line in text.split("\n"):
         m = SESSION_RE.match(line.strip())
         if m:
-            current = {
-                "num": m.group(1),
-                "heading": line.strip().rstrip(":").strip() or f"Session {m.group(1)}",
-                "lines": [],
-            }
+            heading = line.strip()
+            if heading.endswith(":"):
+                heading = heading[:-1].rstrip()
+            current = {"num": m.group(1), "heading": heading, "lines": []}
             sessions.append(current)
             continue
         if current is None:
-            if line.strip() and not title:
-                title = line.strip()
+            if title is None:
+                if line.strip():
+                    title = line.strip()
+            else:
+                preamble.append(line)
             continue
         current["lines"].append(line)
 
-    return (title or "The Rum Diaries"), sessions
+    seen: dict[str, int] = {}
+    for session in sessions:
+        base = f"session-{session['num']}"
+        seen[base] = seen.get(base, 0) + 1
+        session["id"] = base if seen[base] == 1 else f"{base}-{seen[base]}"
+
+    return (title or "The Rum Diaries"), preamble, sessions
 
 
 def to_blocks(lines: list[str]) -> list[list[str]]:
@@ -96,17 +153,22 @@ def esc(s: str) -> str:
 
 
 def is_manifest(block: list[str]) -> bool:
-    """A short opening block of ``Label: value`` lines (the session roster)."""
-    if not (1 <= len(block) <= 6):
+    """A short opening block of ``Label: value`` lines (the session roster).
+
+    Needs at least two label lines, so a lone sentence that happens to carry a
+    colon is not dressed up as a roster.
+    """
+    if not (2 <= len(block) <= 6):
         return False
     hits = sum(1 for ln in block if LABEL_RE.match(ln))
-    return hits >= max(1, (len(block) + 1) // 2)
+    return hits >= max(2, (len(block) + 1) // 2)
 
 
 def render_manifest(block: list[str]) -> str:
     rows = []
     for ln in block:
-        if ":" in ln:
+        ln = ln.strip()
+        if LABEL_RE.match(ln):
             label, _, val = ln.partition(":")
             rows.append(
                 '<div class="manifest-row">'
@@ -115,15 +177,18 @@ def render_manifest(block: list[str]) -> str:
                 "</div>"
             )
         else:
+            # Not a label — a continuation line. Keep it whole rather than
+            # chopping it at whatever colon it happens to contain.
             rows.append(f'<div class="manifest-row"><span class="manifest-val">{esc(ln)}</span></div>')
     return '<aside class="manifest">' + "".join(rows) + "</aside>"
 
 
 def render_block(block: list[str]) -> str:
-    """Render a paragraph block, grouping consecutive bullet lines into lists."""
+    """Render a paragraph block, grouping consecutive list lines into lists."""
     out: list[str] = []
     para: list[str] = []
     items: list[str] = []
+    kind: str | None = None
 
     def flush_para():
         if para:
@@ -131,14 +196,24 @@ def render_block(block: list[str]) -> str:
             para.clear()
 
     def flush_list():
+        nonlocal kind
         if items:
-            out.append("<ul>" + "".join(f"<li>{esc(i)}</li>" for i in items) + "</ul>")
+            tag = kind or "ul"
+            out.append(f"<{tag}>" + "".join(f"<li>{esc(i)}</li>" for i in items) + f"</{tag}>")
             items.clear()
+        kind = None
 
     for ln in block:
         m = BULLET_RE.match(ln)
+        this_kind = "ul"
+        if not m:
+            m = NUMBER_RE.match(ln)
+            this_kind = "ol"
         if m:
             flush_para()
+            if kind and kind != this_kind:
+                flush_list()
+            kind = this_kind
             items.append(m.group(1))
         else:
             flush_list()
@@ -148,16 +223,16 @@ def render_block(block: list[str]) -> str:
     return "".join(out)
 
 
-def render_body(session: dict) -> str:
-    blocks = to_blocks(session["lines"])
+def render_content(lines: list[str], empty_note: str | None = None) -> str:
+    """Render doc lines: an opening roster block, then prose and lists."""
     parts: list[str] = []
-    for i, block in enumerate(blocks):
+    for i, block in enumerate(to_blocks(lines)):
         if i == 0 and is_manifest(block):
             parts.append(render_manifest(block))
         else:
             parts.append(render_block(block))
-    if not parts:
-        parts.append('<p class="faded">The ink trails off here — this tale is yet to be written&hellip;</p>')
+    if not parts and empty_note:
+        parts.append(empty_note)
     return "\n        ".join(parts)
 
 
@@ -165,9 +240,9 @@ def render_letter(session: dict, index: int) -> str:
     # Deterministic, gentle variety so the stack looks hand-scattered.
     tilt = (-1.1, 1.3, -0.7, 0.9, -1.4, 0.6)[index % 6]
     variant = index % 3
-    body = render_body(session)
+    body = render_content(session["lines"], FADED_NOTE)
     return f"""\
-      <article class="letter" id="session-{session['num']}" data-variant="{variant}" style="--tilt: {tilt}deg;">
+      <article class="letter" id="{session['id']}" data-variant="{variant}" style="--tilt: {tilt}deg;">
         <div class="splat splat-1" aria-hidden="true"></div>
         <div class="splat splat-2" aria-hidden="true"></div>
         <div class="stain-ring" aria-hidden="true"></div>
@@ -176,13 +251,15 @@ def render_letter(session: dict, index: int) -> str:
       </article>"""
 
 
-def render_page(title: str, sessions: list[dict]) -> str:
+def render_page(title: str, preamble: list[str], sessions: list[dict]) -> str:
     letters = "\n".join(render_letter(s, i) for i, s in enumerate(sessions))
     nav = "\n".join(
-        f'          <li><a href="#session-{s["num"]}">'
+        f'          <li><a href="#{s["id"]}">'
         f'{esc(s["heading"])}</a></li>'
         for s in sessions
     )
+    intro = render_content(preamble)
+    intro_html = f'\n      <div class="preamble">\n        {intro}\n      </div>' if intro else ""
     return f"""<!doctype html>
 <html lang="en">
 <head>
@@ -199,7 +276,7 @@ def render_page(title: str, sessions: list[dict]) -> str:
   <div class="voyage">
     <header class="ledger-head">
       <h1>{esc(title)}</h1>
-      <p class="subtitle">A Pathfinder voyage, as set down in the ship&rsquo;s log</p>
+      <p class="subtitle">A Pathfinder voyage, as set down in the ship&rsquo;s log</p>{intro_html}
       <nav class="voyage-log" aria-label="Sessions">
         <span class="voyage-log-title">Ports of call</span>
         <ol>
@@ -227,19 +304,29 @@ def render_page(title: str, sessions: list[dict]) -> str:
 def main() -> int:
     try:
         text = fetch_text()
-    except Exception as exc:  # noqa: BLE001 — surface any fetch failure clearly
-        print(f"error: could not fetch the Google Doc: {exc}", file=sys.stderr)
+    except FetchError as exc:
+        print(f"error: {exc}", file=sys.stderr)
         print("hint: the doc must be shared as 'Anyone with the link can view'.", file=sys.stderr)
         return 1
 
-    title, sessions = split_sessions(text)
+    title, preamble, sessions = split_sessions(text)
     if not sessions:
         print("error: no 'Session N:' headings found in the document.", file=sys.stderr)
         return 1
 
-    OUT.mkdir(exist_ok=True)
-    (OUT / "index.html").write_text(render_page(title, sessions), encoding="utf-8")
-    shutil.copyfile(STATIC / "style.css", OUT / "style.css")
+    style_src = STATIC / "style.css"
+    if not style_src.is_file():
+        print(f"error: missing stylesheet: {style_src}", file=sys.stderr)
+        return 1
+
+    page = render_page(title, preamble, sessions)
+    try:
+        OUT.mkdir(exist_ok=True)
+        shutil.copyfile(style_src, OUT / "style.css")
+        (OUT / "index.html").write_text(page, encoding="utf-8")
+    except OSError as exc:
+        print(f"error: could not write the site: {exc}", file=sys.stderr)
+        return 1
 
     print(f"built {len(sessions)} session(s) → {OUT / 'index.html'}")
     return 0

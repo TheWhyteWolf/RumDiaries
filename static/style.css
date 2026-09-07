@@ -55,6 +55,24 @@ body {
   font-size: 1.2rem;
 }
 
+/* Whatever the log's author wrote above the first session heading. */
+.preamble {
+  max-width: 42rem;
+  margin: 0 auto 1.75rem;
+  color: #cdbd95;
+  font-size: 1.05rem;
+}
+.preamble p { margin: 0 0 0.6rem; }
+.preamble ul, .preamble ol { display: inline-block; text-align: left; margin: 0 0 0.6rem; }
+.preamble .manifest {
+  text-align: left;
+  color: #e6d6ab;
+  background: rgba(0, 0, 0, 0.18);
+  border-color: rgba(201, 162, 39, 0.35);
+  border-left-color: var(--gold);
+}
+.preamble .manifest-label { color: var(--gold); }
+
 /* Ports of call — a little brass-and-rope index. */
 .voyage-log {
   display: inline-block;
@@ -129,8 +147,10 @@ body {
 
 /* Bullet lists of names / loot — quill ticks. */
 .letter ul { list-style: none; padding-left: 1.4rem; margin: 0 0 1.2rem; }
+.letter ol { list-style: decimal; padding-left: 1.9rem; margin: 0 0 1.2rem; }
 .letter li { position: relative; margin: 0.2rem 0; }
-.letter li::before {
+.letter ol li::marker { color: var(--rum); font-family: "IM Fell English SC", serif; }
+.letter ul > li::before {
   content: "\2738"; /* heavy snowflake-ish quill mark */
   position: absolute; left: -1.4rem;
   color: var(--rum); font-size: 0.85em;
@@ -153,7 +173,6 @@ body {
   color: var(--ink-soft);
   min-width: 9.5rem;
 }
-.manifest-label::after { content: ""; }
 .manifest-val { flex: 1; }
 
 /* ----------------------------------------------------- ink splats & stains */
@@ -226,7 +245,7 @@ body {
 
 @media (max-width: 480px) {
   body { font-size: 1.05rem; }
-  .letter { transform: none; }
+  .letter, .letter:hover { transform: none; }
   .manifest-row { flex-direction: column; gap: 0; }
   .manifest-label { min-width: 0; }
 }

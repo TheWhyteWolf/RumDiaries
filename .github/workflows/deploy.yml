@@ -23,6 +23,9 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
+    outputs:
+      publish: ${{ steps.decide.outputs.publish }}
+      digest: ${{ steps.fingerprint.outputs.digest }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -30,13 +33,40 @@ jobs:
           python-version: "3.12"
       - name: Build the site
         run: python build.py
+
+      # The schedule fires 24x a day; the log is usually written to once a
+      # week. Fingerprint the built site and, on scheduled runs only, skip the
+      # upload + deploy when it matches what we last published.
+      - name: Fingerprint the built site
+        id: fingerprint
+        run: echo "digest=$(cat site/index.html site/style.css | sha256sum | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
+      - name: Look for a previous deploy of this exact site
+        id: published
+        uses: actions/cache/restore@v4
+        with:
+          path: .published-digest
+          key: pages-published-${{ steps.fingerprint.outputs.digest }}
+      - name: Decide whether to publish
+        id: decide
+        run: |
+          if [ "${{ steps.published.outputs.cache-hit }}" = "true" ] \
+             && [ "${{ github.event_name }}" = "schedule" ]; then
+            echo "The log is unchanged since the last deploy — skipping publish."
+            echo "publish=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "publish=true" >> "$GITHUB_OUTPUT"
+          fi
+
       - uses: actions/configure-pages@v5
+        if: steps.decide.outputs.publish == 'true'
       - uses: actions/upload-pages-artifact@v3
+        if: steps.decide.outputs.publish == 'true'
         with:
           path: site
 
   deploy:
     needs: build
+    if: needs.build.outputs.publish == 'true'
     runs-on: ubuntu-latest
     environment:
       name: github-pages
@@ -44,3 +74,15 @@ jobs:
     steps:
       - id: deployment
         uses: actions/deploy-pages@v4
+
+      # Only remember a fingerprint once it is genuinely live, so a failed
+      # deploy is retried on the next run rather than skipped as "unchanged".
+      - name: Remember what is published
+        continue-on-error: true
+        run: echo "${{ needs.build.outputs.digest }}" > .published-digest
+      - name: Cache the published fingerprint
+        continue-on-error: true
+        uses: actions/cache/save@v4
+        with:
+          path: .published-digest
+          key: pages-published-${{ needs.build.outputs.digest }}
